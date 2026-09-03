@@ -114,7 +114,7 @@ jobs:
         if: ${{ env.VERSION != 'master' }}
         uses: actions/checkout@v4
         with:
-          repository: rustdesk/rustdesk
+          repository: weststreetboy/rustdesk
           ref: refs/tags/${{ env.VERSION }}
           submodules: recursive
 
@@ -122,7 +122,7 @@ jobs:
         if: ${{ env.VERSION == 'master' }}
         uses: actions/checkout@v4
         with:
-          repository: rustdesk/rustdesk
+          repository: weststreetboy/rustdesk
           submodules: recursive
 
       - name: Install ImageMagick on Windows
@@ -220,7 +220,7 @@ jobs:
           shell: pwsh
           continue_on_error: true
           command: |
-            Invoke-WebRequest -Uri https://raw.githubusercontent.com/bryangerlach/rdgen/refs/heads/master/.github/patches/allowCustom.diff -OutFile allowCustom.diff
+            Invoke-WebRequest -Uri https://raw.githubusercontent.com/weststreetboy/rdgen/refs/heads/master/.github/patches/allowCustom.diff -OutFile allowCustom.diff
             git apply allowCustom.diff
 
       - name: Install LLVM and Clang

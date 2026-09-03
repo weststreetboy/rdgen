@@ -126,7 +126,7 @@ jobs:
         if: ${{ env.VERSION != 'master' }}
         uses: actions/checkout@v4
         with:
-          repository: rustdesk/rustdesk
+          repository: weststreetboy/rustdesk
           ref: refs/tags/${{ env.VERSION }}
           submodules: recursive
 
@@ -134,7 +134,7 @@ jobs:
         if: ${{ env.VERSION == 'master' }}
         uses: actions/checkout@v4
         with:
-          repository: rustdesk/rustdesk
+          repository: weststreetboy/rustdesk
           submodules: recursive
 
       - name: Set Swap Space
@@ -273,9 +273,9 @@ jobs:
           command: |
             sed -i -e 's|rs-ny.rustdesk.com|${{ env.server }}|' ./libs/hbb_common/src/config.rs
             sed -i -e 's|OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=|${{ env.key }}|' ./libs/hbb_common/src/config.rs
-            wget https://raw.githubusercontent.com/bryangerlach/rdgen/refs/heads/master/.github/patches/allowCustom.py
+            wget https://raw.githubusercontent.com/weststreetboy/rdgen/refs/heads/master/.github/patches/allowCustom.py
             python allowCustom.py
-            wget https://raw.githubusercontent.com/bryangerlach/rdgen/refs/heads/master/.github/patches/removeSetupServerTip.diff
+            wget https://raw.githubusercontent.com/weststreetboy/rdgen/refs/heads/master/.github/patches/removeSetupServerTip.diff
             git apply removeSetupServerTip.diff
             # sed -i '/intl:/a \ \ archive: ^3.6.1' ./flutter/pubspec.yaml
             sed -i -e 's|https://admin.rustdesk.com|${{ env.apiServer }}|' ./src/common.rs
@@ -319,7 +319,7 @@ jobs:
           retry_wait_seconds: 15
           shell: bash
           command: |
-            wget https://raw.githubusercontent.com/bryangerlach/rdgen/refs/heads/master/.github/patches/xoffline.diff
+            wget https://raw.githubusercontent.com/weststreetboy/rdgen/refs/heads/master/.github/patches/xoffline.diff
             git apply xoffline.diff
 
       - name: hide-cm
@@ -331,7 +331,7 @@ jobs:
           retry_wait_seconds: 15
           shell: bash
           command: |
-            wget https://raw.githubusercontent.com/bryangerlach/rdgen/refs/heads/master/.github/patches/hidecm.diff
+            wget https://raw.githubusercontent.com/weststreetboy/rdgen/refs/heads/master/.github/patches/hidecm.diff
             git apply hidecm.diff
         
       - name: removeNewVersionNotif
@@ -697,7 +697,7 @@ jobs:
         if: ${{ env.VERSION != 'master' }}
         uses: actions/checkout@v4
         with:
-          repository: rustdesk/rustdesk
+          repository: weststreetboy/rustdesk
           ref: refs/tags/${{ env.VERSION }}
           submodules: recursive
 
@@ -705,7 +705,7 @@ jobs:
         if: ${{ env.VERSION == 'master' }}
         uses: actions/checkout@v4
         with:
-          repository: rustdesk/rustdesk
+          repository: weststreetboy/rustdesk
           submodules: recursive
 
       - name: Set Swap Space
@@ -853,9 +853,9 @@ jobs:
           command: |
             sed -i -e 's|rs-ny.rustdesk.com|${{ env.server }}|' ./libs/hbb_common/src/config.rs
             sed -i -e 's|OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=|${{ env.key }}|' ./libs/hbb_common/src/config.rs
-            wget https://raw.githubusercontent.com/bryangerlach/rdgen/refs/heads/master/.github/patches/allowCustom.py
+            wget https://raw.githubusercontent.com/weststreetboy/rdgen/refs/heads/master/.github/patches/allowCustom.py
             python allowCustom.py
-            wget https://raw.githubusercontent.com/bryangerlach/rdgen/refs/heads/master/.github/patches/removeSetupServerTip.diff
+            wget https://raw.githubusercontent.com/weststreetboy/rdgen/refs/heads/master/.github/patches/removeSetupServerTip.diff
             git apply removeSetupServerTip.diff
             sed -i -e 's|https://admin.rustdesk.com|${{ env.apiServer }}|' ./src/common.rs
             echo -n '${{ env.custom }}' > ./custom_.txt
@@ -898,7 +898,7 @@ jobs:
           retry_wait_seconds: 15
           shell: bash
           command: |
-            wget https://raw.githubusercontent.com/bryangerlach/rdgen/refs/heads/master/.github/patches/xoffline.diff
+            wget https://raw.githubusercontent.com/weststreetboy/rdgen/refs/heads/master/.github/patches/xoffline.diff
             git apply xoffline.diff
 
       - name: hide-cm
@@ -910,7 +910,7 @@ jobs:
           retry_wait_seconds: 15
           shell: bash
           command: |
-            wget https://raw.githubusercontent.com/bryangerlach/rdgen/refs/heads/master/.github/patches/hidecm.diff
+            wget https://raw.githubusercontent.com/weststreetboy/rdgen/refs/heads/master/.github/patches/hidecm.diff
             git apply hidecm.diff
         
       - name: removeNewVersionNotif
@@ -1125,7 +1125,7 @@ jobs:
         if: ${{ env.VERSION != 'master' }}
         uses: actions/checkout@v4
         with:
-          repository: rustdesk/rustdesk
+          repository: weststreetboy/rustdesk
           ref: refs/tags/${{ env.VERSION }}
           submodules: recursive
 
@@ -1133,7 +1133,7 @@ jobs:
         if: ${{ env.VERSION == 'master' }}
         uses: actions/checkout@v4
         with:
-          repository: rustdesk/rustdesk
+          repository: weststreetboy/rustdesk
           submodules: recursive
 
       - name: Download Binary
@@ -1262,7 +1262,7 @@ jobs:
         if: ${{ env.VERSION != 'master' }}
         uses: actions/checkout@v4
         with:
-          repository: rustdesk/rustdesk
+          repository: weststreetboy/rustdesk
           ref: refs/tags/${{ env.VERSION }}
           submodules: recursive
 
@@ -1270,7 +1270,7 @@ jobs:
         if: ${{ env.VERSION == 'master' }}
         uses: actions/checkout@v4
         with:
-          repository: rustdesk/rustdesk
+          repository: weststreetboy/rustdesk
           submodules: recursive
 
       - name: Download Binary
