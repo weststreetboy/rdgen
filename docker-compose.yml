@@ -34,11 +34,11 @@ services:
       # name, which breaks SQLite. A named volume sidesteps that footgun.
       - rdgen_db:/opt/rdgen/db.sqlite3
 
-volumes:
-  rdgen_db:
-
-  # Fixed-domain public access. Only starts with:
+  # Fixed-domain public access via Cloudflare Named Tunnel (anglestudio.dpdns.org).
+  # Only starts with:
   #   docker compose --profile tunnel up -d
+  # The tunnel ingress must target http://rdgen:8000 (compose service name,
+  # NOT localhost:8000, because localhost is the tunnel container itself).
   cloudflared:
     profiles: ["tunnel"]
     image: cloudflare/cloudflared:latest
@@ -46,3 +46,6 @@ volumes:
     command: tunnel run --token ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env}
     depends_on:
       - rdgen
+
+volumes:
+  rdgen_db:
