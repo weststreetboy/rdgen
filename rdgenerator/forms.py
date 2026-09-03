@@ -36,7 +36,7 @@ class GenerateForm(forms.Form):
     compname = forms.CharField(label="Company name",required=False)
 
     #Visual
-    iconfile = forms.FileField(label="Custom App Icon (in .png format)", required=False, widget=forms.FileInput(attrs={'accept': 'image/png'}))
+    iconfile = forms.FileField(label="Custom App Icon (in .png format)", required=False, widget=forms.FileInput(attrs={'accept': 'image/png'}), help_text="Recommended: square PNG, ≥ 512×512. Smaller images are upscaled and may look blurry in the .exe.")
     logofile = forms.FileField(label="Custom App Logo (in .png format)", required=False, widget=forms.FileInput(attrs={'accept': 'image/png'}))
     privacyfile = forms.FileField(label="Custom privacy screen (in .png format)", required=False, widget=forms.FileInput(attrs={'accept': 'image/png'}))
     iconbase64 = forms.CharField(required=False)

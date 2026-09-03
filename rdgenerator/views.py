@@ -486,7 +486,10 @@ def update_github_run(request):
     return HttpResponse('')
 
 def resize_and_encode_icon(imagefile):
-    maxWidth = 200
+    # Windows .ico 的最大层是 256x256，shell 还会请求 96/128/48 等中间尺寸。
+    # 源图若小于 256，这些层就只能靠放大插值生成，图标必然发虚。
+    # 这里保留 512px 源图（2x 超采样），让每个尺寸都由高质量降采样得出。
+    maxWidth = 512
     try:
         with io.BytesIO() as image_buffer:
             for chunk in imagefile.chunks():

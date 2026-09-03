@@ -332,8 +332,9 @@
                     {{ form.logobase64.as_hidden }}
                     {{ form.privacybase64.as_hidden }}
                     <label for="{{ form.iconfile.id_for_label }}">Custom App Icon (in .png format)</label>
-                    {{ form.iconfile }}<br><br>
-                    <!-- <input type="file" name="iconfile" id="iconfile" accept="image/png"> -->
+                    {{ form.iconfile }}
+                    {% if form.iconfile.help_text %}<small class="form-text text-muted d-block">{{ form.iconfile.help_text }}</small>{% endif %}
+                    <div id="icon-size-warn" class="text-danger small mt-1" style="display:none"></div>
                     <div id="icon-preview"></div><br><br>
                     <label for="{{ form.logofile.id_for_label }}">Custom App Logo (in .png format)</label>
                     {{ form.logofile }}<br><br>
@@ -414,6 +415,22 @@
             });
         });
         document.getElementById("{{ form.iconfile.id_for_label }}").addEventListener('change', function(event) {
+            // Check uploaded icon resolution and warn if too small
+            var f = event.target.files[0];
+            if (f) {
+                var probe = new Image();
+                probe.onload = function() {
+                    var warn = document.getElementById('icon-size-warn');
+                    if (probe.naturalWidth < 512 || probe.naturalHeight < 512) {
+                        warn.textContent = '⚠ ' + probe.naturalWidth + '×' + probe.naturalHeight + ' is too small for a sharp .exe icon — upload a ≥ 512×512 square PNG.';
+                        warn.style.display = 'block';
+                    } else {
+                        warn.style.display = 'none';
+                    }
+                    URL.revokeObjectURL(probe.src);
+                };
+                probe.src = URL.createObjectURL(f);
+            }
             previewImage(event.target, 'icon-preview');
         });
         document.getElementById("{{ form.logofile.id_for_label }}").addEventListener('change', function(event) {

@@ -2,3 +2,5 @@
 db.sqlite3
 gunicorn.conf
 .venv
+secrets.local.bat
+secrets.local.sh
