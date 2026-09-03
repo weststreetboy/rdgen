@@ -390,7 +390,11 @@ def generator_view(request):
         form = GenerateForm(request.POST, request.FILES)
         if form.is_valid():
             params = form.cleaned_data
-            full_url = f"{_settings.PROTOCOL}://{request.get_host()}" if _settings.GENURL else f"{_settings.PROTOCOL}://{request.get_host()}"
+            # GENURL is the public URL GitHub Actions uses to reach this server.
+            # Without it we would fall back to request.get_host(), which is
+            # "localhost" when the form is opened locally - Actions could then
+            # never fetch secrets.zip. Strip any trailing slash to keep URLs clean.
+            full_url = _settings.GENURL.rstrip('/') if _settings.GENURL else f"{_settings.PROTOCOL}://{request.get_host()}"
             result = generate_custom_client(params, full_url)
             if result['success']:
                 return render(request, 'waiting.html', {

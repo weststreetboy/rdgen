@@ -117,8 +117,9 @@ def api_generate(request):
             "details": errors
         }, status=400)
 
-    # Build full_url the same way as generator_view
-    full_url = f"{_settings.PROTOCOL}://{request.get_host()}" if _settings.GENURL else f"{_settings.PROTOCOL}://{request.get_host()}"
+    # Build full_url the same way as generator_view: prefer the configured
+    # public GENURL so Actions can reach us even when called from localhost.
+    full_url = _settings.GENURL.rstrip('/') if _settings.GENURL else f"{_settings.PROTOCOL}://{request.get_host()}"
 
     result = generate_custom_client(cleaned, full_url)
 
