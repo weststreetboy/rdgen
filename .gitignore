@@ -4,3 +4,10 @@ gunicorn.conf
 .venv
 secrets.local.bat
 secrets.local.sh
+
+# Runtime artifacts - uploaded icons/logos and generated secrets zips / clients.
+# These hold user data and (for temp_zips) the encrypted build config.
+png/
+temp_zips/
+exe/
+media/
