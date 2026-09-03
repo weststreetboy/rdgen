@@ -1,8 +1,8 @@
 services:
   rdgen:
-    # 本地构建，不再依赖 bryangerlach/rdgen:latest 预构建镜像
+    # 本地构建镜像（不引用外部预构建镜像）
     build: .
-    #image: bryangerlach/rdgen:latest
+    #image: weststreetboy/rdgen:latest
     restart: unless-stopped
     environment:
       SECRET_KEY: "change-me-to-a-random-secret-key"

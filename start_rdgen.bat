@@ -1,7 +1,7 @@
 @echo off
 REM ============================================================
 REM  RDGen 一键启动脚本（Windows）
-REM  本地部署，不依赖 bryangerlach/rdgen 预构建镜像
+REM  本地部署，使用 weststreetboy/rdgen 仓库与本地构建镜像
 REM  用法：双击本文件，或命令行执行 start_rdgen.bat
 REM ============================================================
 
