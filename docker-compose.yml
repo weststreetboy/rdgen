@@ -1,10 +1,10 @@
 services:
   rdgen:
-    # Deploy by pulling the published image. To build from source instead,
-    # uncomment `build: .` and run `docker compose build`.
-    image: weststreetboy/rdgen:latest
-    #build: .
-    pull_policy: always
+    # 默认：在本机从源码构建，不需要 Docker Hub 账号（群晖 NAS / 自托管）。
+    build: .
+    # 若改用已发布镜像：注释掉上面 `build: .`，取消下面两行注释
+    # image: weststreetboy/rdgen:latest
+    # pull_policy: if_not_present
     restart: unless-stopped
     # Every value is required: a missing one halts startup with a clear message
     # instead of failing later when GitHub Actions tries to call back.
