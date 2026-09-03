@@ -1,19 +1,25 @@
 services:
   rdgen:
-    # 本地构建镜像（不引用外部预构建镜像）
-    build: .
-    #image: weststreetboy/rdgen:latest
+    # Deploy by pulling the published image. To build from source instead,
+    # uncomment `build: .` and run `docker compose build`.
+    image: weststreetboy/rdgen:latest
+    #build: .
+    pull_policy: always
     restart: unless-stopped
+    # Every value is required: a missing one halts startup with a clear message
+    # instead of failing later when GitHub Actions tries to call back.
     environment:
-      SECRET_KEY: "change-me-to-a-random-secret-key"
-      GHUSER: "github_username"
-      GHBEARER: "github_access_token"
-      GENURL: "accessible_url_of_server"
-      ZIP_PASSWORD: ""
-      GHBRANCH: "master"
-      PROTOCOL: "https"
-      REPONAME: "rdgen"
-      SH_SECRET: ""
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
+      GHUSER: ${GHUSER:?set GHUSER in .env}
+      GHBEARER: ${GHBEARER:?set GHBEARER in .env}
+      GENURL: ${GENURL:?set GENURL in .env}
+      ZIP_PASSWORD: ${ZIP_PASSWORD:?set ZIP_PASSWORD in .env}
+      PROTOCOL: ${PROTOCOL:-https}
+      GHBRANCH: ${GHBRANCH:-master}
+      REPONAME: ${REPONAME:-rdgen}
+      SH_SECRET: ${SH_SECRET:-}
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-3}
+      GUNICORN_THREADS: ${GUNICORN_THREADS:-2}
     ports:
       - "8000:8000"
     dns:
@@ -22,3 +28,21 @@ services:
       - ./exe:/opt/rdgen/exe
       - ./png:/opt/rdgen/png
       - ./temp_zips:/opt/rdgen/temp_zips
+      - ./media:/opt/rdgen/media
+      # SQLite keeps state across container restarts. Bind-mounting a file that
+      # does not yet exist makes Docker create an (empty) *directory* of that
+      # name, which breaks SQLite. A named volume sidesteps that footgun.
+      - rdgen_db:/opt/rdgen/db.sqlite3
+
+volumes:
+  rdgen_db:
+
+  # Fixed-domain public access. Only starts with:
+  #   docker compose --profile tunnel up -d
+  cloudflared:
+    profiles: ["tunnel"]
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel run --token ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env}
+    depends_on:
+      - rdgen

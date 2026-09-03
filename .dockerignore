@@ -1,16 +1,40 @@
+# Docker build context excludes
+
+# Compose / build files
 docker-compose.yml
+docker-compose.*.yml
+Dockerfile
+.dockerignore
 
 # Docs
 README.md
 setup.md
 LICENSE
+docs/
 
 # Git stuff
 .git
 .github
 .gitignore
 
-# .gitignore
-*.pyc
-.venv
+# Local secrets - MUST never be baked into a public image.
+# secrets.local.bat holds GHBEARER / SECRET_KEY / ZIP_PASSWORD.
+secrets.local.bat
+secrets.local.sh
+*.local.bat
+*.local.sh
+.env
+
+# Runtime artifacts (user uploads, encrypted build configs, compiled clients)
+png/
+temp_zips/
+exe/
+media/
 db.sqlite3
+
+# Python / tooling
+*.pyc
+__pycache__/
+.venv/
+venv/
+.pytest_cache/

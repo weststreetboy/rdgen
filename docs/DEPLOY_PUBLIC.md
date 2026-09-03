@@ -14,7 +14,7 @@
 | 名字 | 值 | 说明 |
 |---|---|---|
 | `GENURL` | （稍后填）`https://你的域名.trycloudflare.com` | RDGen 的公网入口（必须 https，**不要**带尾斜杠） |
-| `ZIP_PASSWORD` | `15eeafa33b395418fd1e0f183bf9009f4a8fd1d5fb104128274fb549bb9214d2` | 必须和 `start_rdgen.bat` 里 `set ZIP_PASSWORD=` 的值**完全一致** |
+| `ZIP_PASSWORD` | `<your-zip-password>` | 必须和 `start_rdgen.bat` 里 `set ZIP_PASSWORD=` 的值**完全一致**（此处仅占位，切勿提交真实值） |
 
 > 同步设置：仓库 → Settings → General → 勾选 **Allow GitHub Actions to create and approve pull requests**。
 > Actions → 第一次访问时点绿色 **Enable Actions** 按钮。
