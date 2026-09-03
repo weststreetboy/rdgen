@@ -1,42 +1,81 @@
 @echo off
 REM ============================================================
-REM  RDGen 公网模式启动：waitress + cloudflared quick tunnel
+REM  RDGen public mode: waitress + Cloudflare quick tunnel
 REM
-REM  效果：把本地 http://localhost:8000 暴露成 https://xxx.trycloudflare.com
-REM  用法：双击本文件，会打开两个窗口 —— 一个跑 waitress，一个跑 cloudflared
-REM  取 URL：cloudflared 窗口出现 "Your quick Tunnel has been created!" 后，
-REM         复制下面的 https://xxx.trycloudflare.com，填到：
-REM           1. start_rdgen.bat 的 GENURL=  (改完后把 PROTOCOL 也改成 https)
-REM           2. GitHub -> weststreetboy/rdgen -> Settings -> Secrets -> GENURL
+REM  Exposes http://localhost:8000 as https://xxx.trycloudflare.com
+REM  so GitHub Actions can reach it and pull secrets.zip.
+REM
+REM  After it starts, copy the https URL into:
+REM    1) secrets.local.bat -> GENURL=https://xxx.trycloudflare.com
+REM                            PROTOCOL=https
+REM    2) GitHub -> weststreetboy/rdgen -> Settings -> Secrets -> GENURL
 REM ============================================================
 
-REM ---- 0. 检测 cloudflared ----
-where cloudflared >nul 2>nul
-if errorlevel 1 (
-  echo [X] cloudflared 未安装。请先下载：
-  echo     https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe
-  echo     下载后把它放到 C:\Windows\System32 或与本脚本同目录，然后重试。
+setlocal
+
+REM ---- 1. Locate cloudflared in several common places ----
+set "CF="
+if exist "%~dp0cloudflared.exe" set "CF=%~dp0cloudflared.exe"
+if not defined CF if exist "%USERPROFILE%\cloudflared.exe" set "CF=%USERPROFILE%\cloudflared.exe"
+if not defined CF if exist "%SystemRoot%\System32\cloudflared.exe" set "CF=%SystemRoot%\System32\cloudflared.exe"
+if not defined CF (
+  where cloudflared >nul 2>nul
+  if not errorlevel 1 set "CF=cloudflared"
+)
+
+if not defined CF (
+  echo [X] cloudflared.exe not found.
+  echo.
+  echo Download it first.
+  echo.
+  echo   In PowerShell:
+  echo     Invoke-WebRequest -Uri "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe" -OutFile "$env:USERPROFILE\cloudflared.exe"
+  echo.
+  echo   Or in cmd:
+  echo     curl -L -o "%%USERPROFILE%%\cloudflared.exe" https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe
+  echo.
+  echo   It goes to your user folder - no admin rights needed.
+  echo   NOTE: PowerShell's built-in "curl" is an alias for Invoke-WebRequest
+  echo         and does NOT support -L / -o. Use "curl.exe" or the commands above.
+  echo.
   pause
   exit /b 1
 )
 
-echo [1/2] 启动 waitress（本地服务）...
-start "RDGen-waitress" cmd /k start_rdgen.bat
+echo Found cloudflared: %CF%
+echo.
 
-echo [2/2] 等 waitress 就绪后启动 cloudflared quick tunnel...
-timeout /t 6 /nobreak >nul
+REM ---- 2. Start waitress only if port 8000 is free ----
+netstat -ano | findstr ":8000 " | findstr /i "LISTENING" >nul 2>nul
+set PORT_BUSY=%errorlevel%
 
-start "RDGen-cloudflared" cmd /k cloudflared tunnel --url http://localhost:8000 --no-autoupdate
+if "%PORT_BUSY%"=="0" (
+  echo [1/2] Port 8000 already in use - reusing the running waitress.
+) else (
+  echo [1/2] Starting waitress on port 8000...
+  start "RDGen-waitress" cmd /k "%~dp0start_rdgen.bat"
+  timeout /t 6 /nobreak >nul
+)
+
+echo [2/2] Starting Cloudflare quick tunnel...
+start "RDGen-cloudflared" cmd /k ""%CF%" tunnel --url http://localhost:8000 --no-autoupdate"
 
 echo.
 echo ============================================================
-echo  waitress 窗口：本地 waitress 启动日志（应看到 "Serving on http://0.0.0.0:8000"）
-echo  cloudflared 窗口：等待出现 "Your quick Tunnel has been created!" 字样
-echo                   下面那行的 https://*.trycloudflare.com 就是公网 GENURL
-echo ============================================================
-echo  取到 URL 后做两件事：
-echo    A) 写入 start_rdgen.bat:  GENURL=https://你的URL  PROTOCOL=https
-echo    B) GitHub -> weststreetboy/rdgen -> Settings -> Secrets -> GENURL = 同一个 URL
-echo  ZIP_PASSWORD 用 start_rdgen.bat 里的 15eeafa33b39...d2（已与本仓库约定）
+echo  In the cloudflared window, wait for:
+echo      "Your quick Tunnel has been created!"
+echo  then copy the https://*.trycloudflare.com URL below it.
+echo.
+echo  Put that URL in two places:
+echo    A^) secrets.local.bat
+echo         set GENURL=https://xxx.trycloudflare.com
+echo         set PROTOCOL=https
+echo    B^) GitHub -^> weststreetboy/rdgen -^> Settings
+echo       -^> Secrets and variables -^> Actions -^> GENURL = same URL
+echo.
+echo  Then restart RDGen (start_rdgen.bat) so GENURL takes effect.
+echo  NOTE: quick tunnel URLs change on every restart. For a fixed
+echo        URL use a named tunnel - see docs\DEPLOY_PUBLIC.md
 echo ============================================================
 pause
+endlocal
