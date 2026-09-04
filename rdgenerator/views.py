@@ -1,6 +1,6 @@
 import io
 from pathlib import Path
-from django.http import HttpResponse, JsonResponse, HttpResponseForbidden
+from django.http import HttpResponse, JsonResponse, HttpResponseForbidden, HttpResponseRedirect, HttpResponseBadRequest
 from django.shortcuts import render, get_object_or_404
 from django.core.files.base import ContentFile
 import os
@@ -451,16 +451,83 @@ def check_for_file(request):
         })
 
 def download(request):
-    filename = request.GET['filename']
-    uuid = request.GET['uuid']
+    filename = request.GET.get('filename')
+    uuid = request.GET.get('uuid')
+    if not filename or not uuid:
+        return HttpResponseBadRequest("Missing 'filename' or 'uuid' parameter")
     file_path = os.path.join('exe', uuid, filename)
-    with open(file_path, 'rb') as file:
-        content = file.read()
-    response = HttpResponse(content, headers={
-        'Content-Type': 'application/vnd.microsoft.portable-executable',
-        'Content-Disposition': f'attachment; filename="{filename}"'
-    })
-    return response
+    if os.path.exists(file_path):
+        with open(file_path, 'rb') as file:
+            content = file.read()
+        response = HttpResponse(content, headers={
+            'Content-Type': 'application/vnd.microsoft.portable-executable',
+            'Content-Disposition': f'attachment; filename="{filename}"'
+        })
+        return response
+    # Local file is missing. This happens when the runner's POST back to
+    # /save_custom_client was killed by Cloudflare's 100s origin timeout (524),
+    # because the tunnel throughput (~186 KB/s) cannot push a ~23 MB .exe/.msi
+    # inside that limit. The build is never lost though: generator-windows.yml
+    # preserves the finished client as a GitHub Actions artifact, so fall back
+    # to it instead of 500-ing.
+    artifact_url = _artifact_fallback_url(uuid, filename)
+    if artifact_url:
+        return HttpResponseRedirect(artifact_url)
+    return HttpResponse(
+        "This build's client file is not on the server and no GitHub artifact "
+        "fallback was found. Check the run log for details.",
+        status=404,
+    )
+
+
+def _artifact_fallback_url(uuid_val, filename):
+    """When the local client file is absent, resolve the GitHub Actions
+    artifact page that preserves the built client for the run, and return its
+    URL. Returns None if no fallback is available.
+
+    Relies on the GithubRun row created at dispatch time, which already maps
+    uuid -> github_run_id. No new persistence is required.
+    """
+    try:
+        gh_run = GithubRun.objects.get(uuid=uuid_val)
+    except GithubRun.DoesNotExist:
+        return None
+    run_id = gh_run.github_run_id
+    if not run_id:
+        return None
+    # filename is like "anglestudio555.exe"; artifact name is
+    # "rdgen-client-<exename>", so match on the extension-stripped base.
+    base = filename.rsplit('.', 1)[0] if '.' in filename else filename
+    headers = {
+        "Authorization": f"Bearer {_settings.GHBEARER}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    api_url = (
+        f"https://api.github.com/repos/{_settings.GHUSER}/{_settings.REPONAME}"
+        f"/actions/runs/{run_id}/artifacts"
+    )
+    try:
+        resp = requests.get(api_url, headers=headers, timeout=15)
+    except Exception as e:
+        print(f"[artifact-fallback] GitHub API request failed: {e}")
+        return None
+    if resp.status_code != 200:
+        print(f"[artifact-fallback] GitHub API returned {resp.status_code}")
+        return None
+    try:
+        data = resp.json()
+    except ValueError:
+        return None
+    for art in data.get('artifacts', []):
+        if art.get('expired'):
+            continue
+        if base and base in art.get('name', ''):
+            return (
+                f"https://github.com/{_settings.GHUSER}/{_settings.REPONAME}"
+                f"/actions/runs/{run_id}/artifacts/{art['id']}"
+            )
+    return None
 
 def get_png(request):
     filename = request.GET['filename']
