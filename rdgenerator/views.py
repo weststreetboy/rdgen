@@ -433,13 +433,26 @@ def check_for_file(request):
         })
         
     elif gh_run.status in ['failure', 'cancelled', 'timed_out', 'skipped', 'action_required']:
-        return render(request, 'failure.html', {
-            'log_url': github_log_url, 
-            'filename': filename, 
-            'uuid': uuid, 
+        # A "failed" run is not necessarily a lost build. generator-windows.yml
+        # preserves the finished client as a GitHub Actions artifact BEFORE the
+        # upload step, so when the upload is killed by the Cloudflare 524
+        # timeout the run still flips to `failure` yet the artifact survives.
+        # Detect that case and show a friendly "delivered via artifact" page
+        # instead of a scary "Workflow Interrupted", so the user knows the
+        # client is ready and the Download buttons (which 302 to the artifact)
+        # will work.
+        context = {
+            'log_url': github_log_url,
+            'filename': filename,
+            'uuid': uuid,
             'platform': platform,
-            'status': gh_run.status
-        })
+            'status': gh_run.status,
+        }
+        artifact_url = _artifact_fallback_url(uuid, f"{filename}.exe")
+        if artifact_url:
+            context['artifact_available'] = True
+            context['artifact_url'] = artifact_url
+        return render(request, 'failure.html', context)
         
     else:
         return render(request, 'waiting.html', {
