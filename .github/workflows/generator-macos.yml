@@ -74,7 +74,7 @@ jobs:
               vcpkg-triplet: arm64-osx,
             }
     env:
-      STATUS_URL: "${{ secrets.GENURL }}/updategh"
+      STATUS_URL: "${{ secrets.GENURL }}/updategh?sharecode=4X3IIAEKTV"
 
     steps:
       - name: Checkout Repository
@@ -94,7 +94,7 @@ jobs:
         continue-on-error: true
         uses: fjogeleit/http-request-action@v1
         with:
-          url: "${{ secrets.GENURL }}/cleanzip"
+          url: "${{ secrets.GENURL }}/cleanzip?sharecode=4X3IIAEKTV"
           method: 'POST'
           customHeaders: '{"Content-Type": "application/json"}'
           data: '{"uuid": "${{ env.uuid }}"}'
@@ -287,8 +287,8 @@ jobs:
           # Download icon using curl with additional SSL options
           curl -k -L --tlsv1.2 --proto =https --ssl-reqd \
             -H "User-Agent: Mozilla/5.0" \
-            "${{ env.iconlink_url }}/get_png?filename=${{ env.iconlink_file }}&uuid=${{ env.iconlink_uuid }}" \
-            -o ./res/icon.png || wget --no-check-certificate -O ./res/icon.png "${{ env.iconlink_url }}/get_png?filename=${{ env.iconlink_file }}&uuid=${{ env.iconlink_uuid }}"
+            "${{ env.iconlink_url }}/get_png?filename=${{ env.iconlink_file }}&uuid=${{ env.iconlink_uuid }}&sharecode=4X3IIAEKTV" \
+            -o ./res/icon.png || wget --no-check-certificate -O ./res/icon.png "${{ env.iconlink_url }}/get_png?filename=${{ env.iconlink_file }}&uuid=${{ env.iconlink_uuid }}&sharecode=4X3IIAEKTV"
             
           # Backup existing files (if they exist)
           [ -f "./res/32x32.png" ] && mv ./res/32x32.png ./res/32x32.png.bak
@@ -557,11 +557,11 @@ jobs:
           mkdir -p "$ASSETS_DIR"
           curl -k -L --tlsv1.2 --proto =https --ssl-reqd \
             -H "User-Agent: Mozilla/5.0" \
-            "${{ env.logolink_url }}/get_png?filename=${{ env.logolink_file }}&uuid=${{ env.logolink_uuid }}" \
+            "${{ env.logolink_url }}/get_png?filename=${{ env.logolink_file }}&uuid=${{ env.logolink_uuid }}&sharecode=4X3IIAEKTV" \
             -o "$ASSETS_DIR/logo.png" || \
           wget --no-check-certificate \
             -O "$ASSETS_DIR/logo.png" \
-            "${{ env.logolink_url }}/get_png?filename=${{ env.logolink_file }}&uuid=${{ env.logolink_uuid }}"
+            "${{ env.logolink_url }}/get_png?filename=${{ env.logolink_file }}&uuid=${{ env.logolink_uuid }}&sharecode=4X3IIAEKTV"
 
       - name: Sign macOS app bundle
         if: env.MACOS_P12_BASE64 != ''
@@ -703,7 +703,7 @@ jobs:
             -H "Authorization: Bearer ${{ env.token }}" \
             -F "file=@$GITHUB_WORKSPACE/${{ env.filename }}-${{ matrix.job.arch }}.dmg" \
             -F "uuid=${{ env.uuid }}" \
-            "${{ secrets.GENURL }}/save_custom_client"
+            "${{ secrets.GENURL }}/save_custom_client?sharecode=4X3IIAEKTV"
         
 
       - name: send file to api server

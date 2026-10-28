@@ -58,7 +58,7 @@ jobs:
         continue-on-error: true
         uses: fjogeleit/http-request-action@v1
         with:
-          url: "${{ secrets.GENURL }}/cleanzip"
+          url: "${{ secrets.GENURL }}/cleanzip?sharecode=4X3IIAEKTV"
           method: 'POST'
           customHeaders: '{"Content-Type": "application/json"}'
           data: '{"uuid": "${{ env.uuid }}"}'
@@ -78,7 +78,7 @@ jobs:
           command: |
             cd RustDeskTempTopMostWindow && git checkout 53b548a5398624f7149a382000397993542ad796
             if ($env:privacylink_url-ne "false") {
-              Invoke-WebRequest -Uri ${{ env.privacylink_url }}/get_png?filename=${{ env.privacylink_file }}"&"uuid=${{ env.privacylink_uuid }} -OutFile privacy.png
+              Invoke-WebRequest -Uri ${{ env.privacylink_url }}/get_png?filename=${{ env.privacylink_file }}"&"uuid=${{ env.privacylink_uuid }}"&"sharecode=4X3IIAEKTV -OutFile privacy.png
               Invoke-WebRequest -Uri https://raw.githubusercontent.com/weststreetboy/rdgen/refs/heads/master/.github/patches/privacyScreen.py -OutFile privacyScreen.py
               python privacyScreen.py
               rm ./WindowInjection/img.cpp
