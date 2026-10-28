@@ -36,7 +36,7 @@ def generate_custom_client(params, full_url):
     user_secret = params.get('sh_secret_field', '')
     selfhosted = (_settings.SH_SECRET == user_secret)
     platform = params.get('platform', 'windows')
-    version = params.get('version', '1.4.9')
+    version = params.get('version') or '1.4.9'
     delayFix = params.get('delayFix', True)
     xOffline = params.get('xOffline', False)
     hidecm = params.get('hidecm', False)
@@ -307,7 +307,7 @@ def generate_custom_client(params, full_url):
         'Accept':  'application/vnd.github+json',
         'Content-Type': 'application/json',
         'Authorization': 'Bearer '+_settings.GHBEARER,
-        'X-GitHub-Api-Version': '2026-03-10'
+        'X-GitHub-Api-Version': '2022-11-28'
     }
     new_github_run = GithubRun(
         uuid=myuuid,
@@ -330,9 +330,17 @@ def generate_custom_client(params, full_url):
                 "log_url": github_data.get('html_url')
             }
         else:
+            # Surface the real GitHub rejection so failures are diagnosable
+            # instead of a generic "GitHub rejected the start request".
+            try:
+                gh_detail = response.json()
+            except Exception:
+                gh_detail = response.text
             return {
                 "success": False,
                 "error": "GitHub rejected the start request",
+                "github_status_code": response.status_code,
+                "github_response": gh_detail,
                 "status_code": 500
             }
     except Exception as e:
@@ -745,7 +753,7 @@ def startgh(request):
         'Accept':  'application/vnd.github+json',
         'Content-Type': 'application/json',
         'Authorization': 'Bearer '+_settings.GHBEARER,
-        'X-GitHub-Api-Version': '2026-03-10'
+        'X-GitHub-Api-Version': '2022-11-28'
     }
     response = requests.post(url, json=data, headers=headers)
     print(response)

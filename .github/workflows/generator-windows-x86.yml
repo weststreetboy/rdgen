@@ -5,7 +5,7 @@ on:
     inputs:
       version:
         description: 'version to buld'
-        required: true
+        required: false
         default: ''
         type: string
       zip_url:
