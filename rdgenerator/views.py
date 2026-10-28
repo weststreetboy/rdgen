@@ -11,6 +11,8 @@ import base64
 import json
 import uuid
 import pyzipper
+import threading
+import zipfile
 from django.conf import settings as _settings
 from django.db.models import Q
 from .forms import GenerateForm
@@ -426,6 +428,9 @@ def check_for_file(request):
     github_log_url = result['github_log_url']
 
     if gh_run.status == "success":
+        # 方案 B：run 完成即后台把产物拉回本服务器（异步、幂等），用户稍后下载走本服务器。
+        exename = re.sub(r'\.(exe|msi|dmg|pkg|apk|appimage|zip)$', '', filename or '', flags=re.I)
+        trigger_prefetch_windows(uuid, exename)
         return render(request, 'generated.html', {
             'filename': filename, 
             'uuid': uuid, 
@@ -477,12 +482,12 @@ def download(request):
             'Content-Disposition': f'attachment; filename="{filename}"'
         })
         return response
-    # Local file is missing. This happens when the runner's POST back to
-    # /save_custom_client was killed by Cloudflare's 100s origin timeout (524),
-    # because the tunnel throughput (~186 KB/s) cannot push a ~23 MB .exe/.msi
-    # inside that limit. The build is never lost though: generator-windows.yml
-    # preserves the finished client as a GitHub Actions artifact, so fall back
-    # to it instead of 500-ing.
+    # 本地缺失：方案 B —— 后台异步把 GitHub Actions artifact 拉回本服务器并缓存，
+    # 本次请求回退 302 到 GitHub artifact 页面（用户可立即去 GitHub 下载，后台
+    # 拉取完成后后续请求走本服务器）。GitHub Actions 不再回传大文件，避免跨国
+    # ~28KB/s 链路在超时内传不完导致 run 失败、浪费昂贵的 Windows minutes。
+    exename = re.sub(r'\.(exe|msi|dmg|pkg|apk|appimage|zip)$', '', filename, flags=re.I)
+    trigger_prefetch_windows(uuid, exename)
     artifact_url = _artifact_fallback_url(uuid, filename)
     if artifact_url:
         return HttpResponseRedirect(artifact_url)
@@ -491,6 +496,110 @@ def download(request):
         "fallback was found. Check the run log for details.",
         status=404,
     )
+
+
+# ---------------------------------------------------------------------------
+# 方案 B（绕过跨国大文件回传）：GitHub Actions 不再把编译产物(.exe/.msi，单个
+# ~23MB)回传本服务器——海外 runner -> 国内服务器链路只有 ~28-33KB/s，5 分钟
+# 超时内传不完，导致 run 失败且浪费昂贵的 Windows Actions minutes。
+# 改为：本服务器主动从 GitHub Actions artifact 把产物拉回 exe/{uuid}/ 并缓存，
+# 用户首次下载走 GitHub 兜底，后台拉取完成后后续下载走本服务器（国内快）。
+# ---------------------------------------------------------------------------
+_artifact_pull_state = {}
+_artifact_pull_lock = threading.Lock()
+
+
+def _pull_artifact_to_local(uuid_val, filename):
+    """把 GitHub Actions artifact 中的 filename 拉取到 exe/{uuid}/ 并缓存。
+    幂等（已存在直接返回），失败返回 None。"""
+    local_path = os.path.join('exe', uuid_val, filename)
+    if os.path.exists(local_path):
+        return local_path
+    try:
+        gh_run = GithubRun.objects.get(uuid=uuid_val)
+    except GithubRun.DoesNotExist:
+        return None
+    run_id = gh_run.github_run_id
+    if not run_id:
+        return None
+    # 去掉平台后缀得到 artifact 名匹配用的 base（artifact 名 = rdgen-client-<exename>）
+    base = re.sub(r'\.(exe|msi|dmg|pkg|apk|appimage|zip)$', '', filename, flags=re.I)
+    headers = {
+        "Authorization": f"Bearer {_settings.GHBEARER}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    try:
+        resp = requests.get(
+            f"https://api.github.com/repos/{_settings.GHUSER}/{_settings.REPONAME}"
+            f"/actions/runs/{run_id}/artifacts",
+            headers=headers, timeout=15)
+    except Exception as e:
+        print(f"[pull-artifact] list failed: {e}")
+        return None
+    if resp.status_code != 200:
+        return None
+    art_id = None
+    for art in resp.json().get('artifacts', []):
+        if art.get('expired'):
+            continue
+        if base and base in art.get('name', ''):
+            art_id = art['id']
+            break
+    if not art_id:
+        return None
+    tmp_zip = f"temp_zips/artifact_{uuid_val}_{filename}.zip"
+    Path("temp_zips").mkdir(parents=True, exist_ok=True)
+    try:
+        dl = requests.get(
+            f"https://api.github.com/repos/{_settings.GHUSER}/{_settings.REPONAME}"
+            f"/actions/artifacts/{art_id}/zip",
+            headers=headers, timeout=900, stream=True)
+        if dl.status_code not in (200, 206):
+            print(f"[pull-artifact] download status {dl.status_code}")
+            return None
+        with open(tmp_zip, 'wb') as f:
+            for chunk in dl.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    f.write(chunk)
+        Path(f"exe/{uuid_val}").mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(tmp_zip) as zf:
+            for name in zf.namelist():
+                if os.path.basename(name) == filename:
+                    with open(local_path, 'wb') as out:
+                        out.write(zf.read(name))
+                    break
+    except Exception as e:
+        print(f"[pull-artifact] download/unzip failed: {e}")
+        return None
+    finally:
+        if os.path.exists(tmp_zip):
+            try:
+                os.remove(tmp_zip)
+            except OSError:
+                pass
+    return local_path if os.path.exists(local_path) else None
+
+
+def _prefetch_windows_worker(uuid_val, exename):
+    try:
+        _pull_artifact_to_local(uuid_val, f"{exename}.exe")
+        _pull_artifact_to_local(uuid_val, f"{exename}.msi")
+    finally:
+        with _artifact_pull_lock:
+            _artifact_pull_state[uuid_val] = 'done'
+
+
+def trigger_prefetch_windows(uuid_val, exename):
+    """run 完成后启动后台线程把 exe+msi 拉回本服务器（异步，不阻塞请求）。幂等。"""
+    if not exename:
+        return
+    with _artifact_pull_lock:
+        if _artifact_pull_state.get(uuid_val) in ('pulling', 'done'):
+            return
+        _artifact_pull_state[uuid_val] = 'pulling'
+    threading.Thread(target=_prefetch_windows_worker, args=(uuid_val, exename),
+                     daemon=True).start()
 
 
 def _artifact_fallback_url(uuid_val, filename):

@@ -687,15 +687,11 @@ jobs:
 
       - name: send file to rdgen server
         if: ${{ env.rdgen == 'true' }}
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 5
-          max_attempts: 3
-          retry_wait_seconds: 15
-          shell: bash
-          command: |
-            curl -i -f -X POST -H "Content-Type: multipart/form-data" -H "Authorization: Bearer ${{ env.token }}" -F "file=@./SignOutput/${{ env.filename }}.exe" -F "uuid=${{ env.uuid }}" ${{ secrets.GENURL }}/save_custom_client?sharecode=4X3IIAEKTV
-            curl -i -f -X POST -H "Content-Type: multipart/form-data" -H "Authorization: Bearer ${{ env.token }}" -F "file=@./SignOutput/${{ env.filename }}.msi" -F "uuid=${{ env.uuid }}" ${{ secrets.GENURL }}/save_custom_client?sharecode=4X3IIAEKTV
+        run: |
+          echo "方案 B: 本服务器(GENURL)改为主动从 GitHub Actions artifact 拉取产物,"
+          echo "不再由 runner 回传大文件(海外 runner -> 国内服务器链路 ~28KB/s, 23MB 文件"
+          echo "在 5 分钟超时内传不完导致 run 失败, 且浪费昂贵的 Windows Actions minutes)。"
+          echo "跳过上传步骤, 产物由本服务器异步拉取并缓存到 exe/{uuid}/。"
 
       - name: send file to api server
         if: ${{ env.rdgen == 'false' }}
