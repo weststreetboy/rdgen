@@ -323,6 +323,9 @@ def generate_custom_client(params, full_url):
             new_github_run.github_run_id = github_data.get('workflow_run_id')
             new_github_run.status = "in_progress"
             new_github_run.save()
+            # Durable, redeploy-proof mapping so downloads keep working even
+            # after a WB redeploy recreates the SQLite DB.
+            _save_run_index(myuuid, github_data.get('workflow_run_id'))
 
             return {
                 "success": True,
@@ -595,7 +598,7 @@ def check_for_file(request):
             'platform': platform,
             'status': gh_run.status,
         }
-        artifact_url = _artifact_fallback_url(uuid, f"{filename}.exe")
+        artifact_url = _artifact_fallback_url(uuid, f"{filename}.exe", platform)
         if artifact_url:
             context['artifact_available'] = True
             context['artifact_url'] = artifact_url
@@ -630,7 +633,7 @@ def download(request):
     # ~28KB/s 链路在超时内传不完导致 run 失败、浪费昂贵的 Windows minutes。
     exename = re.sub(r'\.(exe|msi|dmg|pkg|apk|appimage|zip)$', '', filename, flags=re.I)
     trigger_prefetch_windows(uuid, exename)
-    artifact_url = _artifact_fallback_url(uuid, filename)
+    artifact_url = _artifact_fallback_url(uuid, filename, platform)
     if artifact_url:
         return HttpResponseRedirect(artifact_url)
     return HttpResponse(
@@ -650,6 +653,85 @@ def download(request):
 _artifact_pull_state = {}
 _artifact_pull_lock = threading.Lock()
 
+# Redeploy-proof run resolution ------------------------------------------------
+# The build's uuid->run_id mapping lives in SQLite, which is recreated on every
+# WB redeploy. If a build was started before a redeploy, the live instance loses
+# that mapping and can no longer find the GitHub artifact fallback, so downloads
+# 404 with "no GitHub artifact fallback was found". We therefore resolve the run
+# id through three layers:
+#   1. the GithubRun DB row (primary)
+#   2. a durable JSON index written at dispatch time
+#   3. the most recent successful run of the relevant workflow (last resort,
+#      safe for a single-user generator and fully redeploy-proof)
+_RUN_INDEX_FILE = os.path.join(_settings.BASE_DIR, 'run_index.json')
+
+_WORKFLOW_BY_PLATFORM = {
+    'windows': 'generator-windows.yml',
+    'windows-x86': 'generator-windows-x86.yml',
+    'macos': 'generator-macos.yml',
+    'linux': 'generator-linux.yml',
+    'android': 'generator-android.yml',
+}
+
+
+def _save_run_index(uuid_val, run_id):
+    """Persist uuid->run_id to a JSON file as a redeploy-proof fallback."""
+    if not run_id:
+        return
+    try:
+        data = {}
+        if os.path.exists(_RUN_INDEX_FILE):
+            try:
+                with open(_RUN_INDEX_FILE, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+            except Exception:
+                data = {}
+        data[uuid_val] = run_id
+        with open(_RUN_INDEX_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f)
+    except Exception as e:
+        print(f"[run-index] save failed: {e}")
+
+
+def _resolve_run_id(uuid_val, platform=None):
+    """Resolve the GitHub workflow run id for a build uuid (see notes above)."""
+    # 1. DB row (primary)
+    try:
+        gh_run = GithubRun.objects.get(uuid=uuid_val)
+        if gh_run.github_run_id:
+            return gh_run.github_run_id
+    except GithubRun.DoesNotExist:
+        pass
+    # 2. JSON index (survives redeploy only if the workdir is persisted)
+    try:
+        if os.path.exists(_RUN_INDEX_FILE):
+            with open(_RUN_INDEX_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            rid = data.get(uuid_val)
+            if rid:
+                return rid
+    except Exception:
+        pass
+    # 3. Latest successful run of the relevant workflow (redeploy-proof)
+    wf = _WORKFLOW_BY_PLATFORM.get((platform or '').lower(), 'generator-windows.yml')
+    headers = {
+        "Authorization": f"Bearer {_settings.GHBEARER}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    try:
+        resp = requests.get(
+            f"https://api.github.com/repos/{_settings.GHUSER}/{_settings.REPONAME}"
+            f"/actions/workflows/{wf}/runs?status=success&per_page=1",
+            headers=headers, timeout=15)
+        if resp.status_code == 200:
+            runs = resp.json().get('workflow_runs', [])
+            if runs:
+                return runs[0]['id']
+    except Exception as e:
+        print(f"[resolve-run] latest-successful lookup failed: {e}")
+    return None
+
 
 def _pull_artifact_to_local(uuid_val, filename):
     """把 GitHub Actions artifact 中的 filename 拉取到 exe/{uuid}/ 并缓存。
@@ -657,11 +739,7 @@ def _pull_artifact_to_local(uuid_val, filename):
     local_path = os.path.join('exe', uuid_val, filename)
     if os.path.exists(local_path):
         return local_path
-    try:
-        gh_run = GithubRun.objects.get(uuid=uuid_val)
-    except GithubRun.DoesNotExist:
-        return None
-    run_id = gh_run.github_run_id
+    run_id = _resolve_run_id(uuid_val)
     if not run_id:
         return None
     # 去掉平台后缀得到 artifact 名匹配用的 base（artifact 名 = rdgen-client-<exename>）
@@ -744,19 +822,16 @@ def trigger_prefetch_windows(uuid_val, exename):
                      daemon=True).start()
 
 
-def _artifact_fallback_url(uuid_val, filename):
+def _artifact_fallback_url(uuid_val, filename, platform=None):
     """When the local client file is absent, resolve the GitHub Actions
     artifact page that preserves the built client for the run, and return its
     URL. Returns None if no fallback is available.
 
-    Relies on the GithubRun row created at dispatch time, which already maps
-    uuid -> github_run_id. No new persistence is required.
+    Uses _resolve_run_id so it keeps working even after a redeploy wiped the
+    SQLite build-state DB (the mapping is recovered via the JSON index or the
+    latest successful workflow run).
     """
-    try:
-        gh_run = GithubRun.objects.get(uuid=uuid_val)
-    except GithubRun.DoesNotExist:
-        return None
-    run_id = gh_run.github_run_id
+    run_id = _resolve_run_id(uuid_val, platform=platform)
     if not run_id:
         return None
     # filename is like "anglestudio555.exe"; artifact name is
