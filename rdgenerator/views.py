@@ -315,7 +315,7 @@ def generate_custom_client(params, full_url):
     )
     try:
         response = requests.post(url, json=data, headers=headers)
-        if response.status_code == 204 or response.status_code == 200:
+        if response.status_code in (200, 202, 204):
             github_data = response.json()
             print(github_data)
             new_github_run.github_run_id = github_data.get('workflow_run_id')
@@ -338,7 +338,7 @@ def generate_custom_client(params, full_url):
                 gh_detail = response.text
             return {
                 "success": False,
-                "error": "GitHub rejected the start request",
+                "error": f"GitHub rejected the start request (HTTP {response.status_code}): {gh_detail}",
                 "github_status_code": response.status_code,
                 "github_response": gh_detail,
                 "status_code": 500
