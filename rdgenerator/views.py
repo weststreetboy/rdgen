@@ -616,6 +616,7 @@ def check_for_file(request):
 def download(request):
     filename = request.GET.get('filename')
     uuid = request.GET.get('uuid')
+    platform = request.GET.get('platform')
     if not filename or not uuid:
         return HttpResponseBadRequest("Missing 'filename' or 'uuid' parameter")
     file_path = os.path.join('exe', uuid, filename)
