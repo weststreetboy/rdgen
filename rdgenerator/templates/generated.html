@@ -200,6 +200,28 @@
 
         // Call on page load
         updatePlatformUI();
+
+        // In-browser build-completion notification (works with zero config).
+        (function () {
+            if (!('Notification' in window)) return;
+            function show() {
+                if (Notification.permission === 'granted') {
+                    try {
+                        var n = new Notification('✅ RDGen 编译完成', {
+                            body: '客户端已构建完成，返回此页面即可下载。'
+                        });
+                        n.onclick = function () { window.focus(); n.close(); };
+                    } catch (e) {}
+                }
+            }
+            if (Notification.permission === 'granted') {
+                show();
+            } else if (Notification.permission !== 'denied') {
+                Notification.requestPermission().then(function (p) {
+                    if (p === 'granted') show();
+                });
+            }
+        })();
     </script>
 </body>
 </html>{{ ... }}

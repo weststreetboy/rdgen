@@ -178,6 +178,32 @@
             }
         }
         updatePlatformUI();
+
+        // In-browser build-completion notification (works with zero config).
+        (function () {
+            if (!('Notification' in window)) return;
+            var logUrl = '{{ log_url }}';
+            function show() {
+                if (Notification.permission === 'granted') {
+                    try {
+                        var n = new Notification('❌ RDGen 编译失败', {
+                            body: '构建未完成，点击查看 GitHub 日志。'
+                        });
+                        n.onclick = function () {
+                            if (logUrl) window.open(logUrl, '_blank');
+                            window.focus(); n.close();
+                        };
+                    } catch (e) {}
+                }
+            }
+            if (Notification.permission === 'granted') {
+                show();
+            } else if (Notification.permission !== 'denied') {
+                Notification.requestPermission().then(function (p) {
+                    if (p === 'granted') show();
+                });
+            }
+        })();
     </script>
 </body>
 </html>

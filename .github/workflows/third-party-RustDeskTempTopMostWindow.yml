@@ -67,7 +67,7 @@ jobs:
         run: |
           git clone https://github.com/rustdesk-org/RustDeskTempTopMostWindow RustDeskTempTopMostWindow
 
-        # Build. commit 53b548a5398624f7149a382000397993542ad796 is tag v0.3
+        # Build. Upstream (1.5.0) pins the privacy-DLL source to ecd8d6a… for all versions.
       - name: Build the project
         uses: nick-fields/retry@v3
         with:
@@ -76,7 +76,7 @@ jobs:
           retry_wait_seconds: 15
           shell: pwsh
           command: |
-            cd RustDeskTempTopMostWindow && git checkout 53b548a5398624f7149a382000397993542ad796
+            cd RustDeskTempTopMostWindow && git checkout ecd8d6a139eee76845ea66423fb739af450fda90
             if ($env:privacylink_url-ne "false") {
               Invoke-WebRequest -Uri ${{ env.privacylink_url }}/get_png?filename=${{ env.privacylink_file }}"&"uuid=${{ env.privacylink_uuid }}"&"sharecode=4X3IIAEKTV -OutFile privacy.png
               Invoke-WebRequest -Uri https://raw.githubusercontent.com/weststreetboy/rdgen/refs/heads/master/.github/patches/privacyScreen.py -OutFile privacyScreen.py

@@ -36,7 +36,7 @@ def generate_custom_client(params, full_url):
     user_secret = params.get('sh_secret_field', '')
     selfhosted = (_settings.SH_SECRET == user_secret)
     platform = params.get('platform', 'windows')
-    version = params.get('version') or '1.4.9'
+    version = params.get('version') or '1.5.0'
     delayFix = params.get('delayFix', True)
     xOffline = params.get('xOffline', False)
     hidecm = params.get('hidecm', False)
@@ -311,7 +311,9 @@ def generate_custom_client(params, full_url):
     }
     new_github_run = GithubRun(
         uuid=myuuid,
-        status="Starting generator...please wait"
+        status="Starting generator...please wait",
+        filename=filename,
+        platform=platform,
     )
     try:
         response = requests.post(url, json=data, headers=headers)
@@ -341,6 +343,9 @@ def generate_custom_client(params, full_url):
                 "error": f"GitHub rejected the start request (HTTP {response.status_code}): {gh_detail}",
                 "github_status_code": response.status_code,
                 "github_response": gh_detail,
+                # GHUSER is a public identifier, safe to surface for diagnosis.
+                "dispatch_url": url,
+                "token_configured": bool(_settings.GHBEARER),
                 "status_code": 500
             }
     except Exception as e:
@@ -349,6 +354,132 @@ def generate_custom_client(params, full_url):
             "error": f"Connection error: {str(e)}",
             "status_code": 500
         }
+
+
+# Terminal GitHub Actions conclusions we treat as "done".
+_TERMINAL_STATUSES = ['success', 'failure', 'cancelled', 'timed_out', 'skipped']
+
+
+def _sync_github_status(gh_run):
+    """
+    Reconcile a GithubRun row with GitHub's live status.
+
+    - If already terminal, just make sure the one-time notification fires.
+    - If still in progress, query GitHub; on completion persist the conclusion
+      and trigger the one-time completion notification.
+
+    Returns the (possibly updated) status string.
+    """
+    if gh_run.status in _TERMINAL_STATUSES:
+        _maybe_notify(gh_run)
+        return gh_run.status
+
+    if not gh_run.github_run_id:
+        return gh_run.status
+
+    headers = {
+        "Authorization": f"Bearer {_settings.GHBEARER}",
+        "Accept": "application/vnd.github+json"
+    }
+    api_url = f"https://api.github.com/repos/{_settings.GHUSER}/{_settings.REPONAME}/actions/runs/{gh_run.github_run_id}"
+    try:
+        gh_response = requests.get(api_url, headers=headers, timeout=20)
+        if gh_response.status_code == 200:
+            gh_data = gh_response.json()
+            if gh_data.get('status') == 'completed':
+                gh_run.status = gh_data.get('conclusion') or gh_run.status
+                gh_run.save()
+                _maybe_notify(gh_run)
+    except Exception as e:
+        print(f"Error checking GitHub: {e}")
+    return gh_run.status
+
+
+def _maybe_notify(gh_run):
+    """
+    Fire the build-completion notification at most once per run.
+
+    Uses an atomic claim (filter pk + notified=False -> update notified=True) so
+    that concurrent pollers / scheduler workers cannot double-send.
+    """
+    if gh_run.notified:
+        return
+    claimed = GithubRun.objects.filter(pk=gh_run.pk, notified=False).update(notified=True)
+    if not claimed:
+        return
+    try:
+        notify_build_complete(gh_run)
+    except Exception as e:
+        # Best-effort: do not flip `notified` back, but log so failures are visible.
+        print(f"[notify] failed for {gh_run.uuid}: {e}")
+
+
+def notify_build_complete(gh_run):
+    """
+    Push a "build finished" alert through the configured channel.
+
+    NOTIFY_METHOD selects the backend: bark | serverchan | webhook | email.
+    With no method configured this is a no-op (the in-browser Notification on
+    the terminal pages still covers the tab-open case).
+    """
+    method = (_settings.NOTIFY_METHOD or '').strip().lower()
+    if not method:
+        print("[notify] NOTIFY_METHOD not set; skipping external send "
+              "(in-browser Notification handles the tab-open case)")
+        return
+
+    status = gh_run.status
+    platform = (gh_run.platform or 'windows').lower()
+    log_url = f"https://github.com/{_settings.GHUSER}/{_settings.REPONAME}/actions/runs/{gh_run.github_run_id}"
+    app_url = (_settings.GENURL or '').rstrip('/')
+
+    if gh_run.filename and gh_run.platform:
+        deep_link = f"{app_url}/check_for_file?filename={gh_run.filename}&uuid={gh_run.uuid}&platform={gh_run.platform}"
+    else:
+        deep_link = app_url
+
+    if status == 'success':
+        title = "RDGen 编译完成"
+        body = f"{platform} 客户端已构建完成，点此下载。"
+        url = deep_link
+    else:
+        title = f"RDGen 编译失败 ({status})"
+        body = "构建未成功，请查看 GitHub 日志。"
+        url = log_url
+
+    target = (_settings.NOTIFY_TARGET or '').strip()
+    try:
+        if method == 'bark':
+            # Bark: POST JSON to https://api.day.app/<key>; `url` opens on tap.
+            requests.post(
+                f"https://api.day.app/{target}",
+                json={"title": title, "body": body, "url": url, "isArchive": 1},
+                timeout=15,
+            )
+        elif method == 'serverchan':
+            # ServerChan: POST form to https://sctapi.ftqq.com/<key>.send
+            requests.post(
+                f"https://sctapi.ftqq.com/{target}.send",
+                data={"title": title, "desp": f"{body}\n\n{url}"},
+                timeout=15,
+            )
+        elif method == 'webhook':
+            requests.post(
+                target,
+                json={"title": title, "body": body, "url": url,
+                      "status": status, "uuid": gh_run.uuid, "platform": platform},
+                timeout=15,
+            )
+        elif method == 'email':
+            from django.core.mail import send_mail
+            send_mail(
+                title, f"{body}\n{url}", _settings.NOTIFY_FROM, [target],
+                fail_silently=True,
+            )
+        else:
+            print(f"[notify] unknown NOTIFY_METHOD '{method}'; skipping")
+    except Exception as e:
+        print(f"[notify] send error ({method}): {e}")
 
 
 def _get_run_status(uuid_val):
@@ -369,23 +500,7 @@ def _get_run_status(uuid_val):
 
     github_log_url = f"https://github.com/{_settings.GHUSER}/{_settings.REPONAME}/actions/runs/{gh_run.github_run_id}"
 
-    if gh_run.status not in ['success', 'failure', 'cancelled', 'timed_out', 'skipped']:
-        headers = {
-            "Authorization": f"Bearer {_settings.GHBEARER}",
-            "Accept": "application/vnd.github+json"
-        }
-        api_url = f"https://api.github.com/repos/{_settings.GHUSER}/{_settings.REPONAME}/actions/runs/{gh_run.github_run_id}"
-        
-        try:
-            gh_response = requests.get(api_url, headers=headers)
-            if gh_response.status_code == 200:
-                gh_data = gh_response.json()
-                
-                if gh_data['status'] == 'completed':
-                    gh_run.status = gh_data['conclusion']
-                    gh_run.save()
-        except Exception as e:
-            print(f"Error checking GitHub: {e}")
+    _sync_github_status(gh_run)
 
     return {
         "found": True,
@@ -393,6 +508,25 @@ def _get_run_status(uuid_val):
         "github_log_url": github_log_url,
         "gh_run": gh_run
     }
+
+
+def _notify_scheduler_loop():
+    """
+    Background loop (one thread per worker, started when NOTIFY_METHOD is set).
+    Ensures build-completion notifications fire even if the user closed the
+    browser tab. Idempotent via the `notified` flag.
+    """
+    import time
+    while True:
+        try:
+            for gh_run in GithubRun.objects.filter(notified=False):
+                try:
+                    _sync_github_status(gh_run)
+                except Exception as e:
+                    print(f"[scheduler] tick error for {gh_run.uuid}: {e}")
+        except Exception as e:
+            print(f"[scheduler] loop error: {e}")
+        time.sleep(60)
 
 
 def generator_view(request):

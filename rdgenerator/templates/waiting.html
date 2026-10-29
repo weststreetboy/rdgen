@@ -240,6 +240,12 @@
         updatePlatformUI();
         //simulateProgress();
 
+        // Pre-request notification permission while we wait, so the terminal
+        // page can pop an alert immediately without prompting the user then.
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+
         setTimeout(function() {
             window.location.replace('/check_for_file?filename={{filename}}&uuid={{uuid}}&platform={{platform}}');
         }, 30000); // 20000 milliseconds = 20 seconds

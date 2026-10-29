@@ -16,12 +16,40 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+# ---------------------------------------------------------------------------
+# WB hosting launches the app with its own process entry and does NOT source
+# start.sh, so the env vars exported there (GHUSER/GHBEARER/ZIP_PASSWORD/...)
+# are absent at runtime. To keep the deployed instance self-contained we load
+# a local `secrets.env` from the project root (uploaded alongside the app)
+# when a variable is not already present in the environment. The public repo
+# never contains this file.
+# ---------------------------------------------------------------------------
+def _load_secrets_env():
+    env_file = BASE_DIR / 'secrets.env'
+    if not env_file.exists():
+        return
+    with open(env_file, 'r', encoding='utf-8') as _fh:
+        for _raw in _fh:
+            _line = _raw.strip()
+            if not _line or _line.startswith('#') or '=' not in _line:
+                continue
+            _key, _, _val = _line.partition('=')
+            _key, _val = _key.strip(), _val.strip().strip('"').strip("'")
+            if _key and _key not in os.environ:
+                os.environ[_key] = _val
+
+
+_load_secrets_env()
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get('SECRET_KEY','django-insecure-!(t-!f#6g#sr%yfded9(xha)g+=!6craeez^cp+*&bz_7vdk61')
-GHUSER = os.environ.get("GHUSER", '')
+# Public identifiers default to the real repo so the dispatch URL is always
+# well-formed even if the environment does not inject them.
+GHUSER = os.environ.get("GHUSER", 'weststreetboy')
 GHBEARER = os.environ.get("GHBEARER", '')
 GENURL = os.environ.get("GENURL", '')
 GHBRANCH = os.environ.get("GHBRANCH",'master')
@@ -29,6 +57,20 @@ ZIP_PASSWORD = os.environ.get("ZIP_PASSWORD",'insecure')
 PROTOCOL = os.environ.get("PROTOCOL", 'https')
 REPONAME = os.environ.get("REPONAME", 'rdgen')
 SH_SECRET = os.environ.get('SH_SECRET', 'secret')
+
+# ---------------------------------------------------------------------------
+# Build-completion notification (backend push). Off by default: the in-browser
+# Notification on the terminal pages already covers the "tab is open" case.
+# Set NOTIFY_METHOD to one of: bark | serverchan | webhook | email
+#   bark       -> NOTIFY_TARGET = your Bark device key (https://api.day.app/<key>)
+#   serverchan  -> NOTIFY_TARGET = your ServerChan SCK key (https://sctapi.ftqq.com/<key>)
+#   webhook    -> NOTIFY_TARGET = any URL that accepts a JSON POST
+#                 {title, body, url, status, uuid, platform}
+#   email      -> NOTIFY_TARGET = recipient address (NOTIFY_FROM = sender)
+# ---------------------------------------------------------------------------
+NOTIFY_METHOD = os.environ.get("NOTIFY_METHOD", '')
+NOTIFY_TARGET = os.environ.get("NOTIFY_TARGET", '')
+NOTIFY_FROM = os.environ.get("NOTIFY_FROM", 'rdgen@localhost')
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
