@@ -3,6 +3,10 @@ name: build RustDeskTempTopMostWindow
 on:
   workflow_call:
     inputs:
+        rustdesk-version:
+            description: 'RustDesk version, used to select a compatible privacy DLL'
+            type: string
+            default: ''
         upload-artifact:
           type: boolean
           default: true
@@ -42,9 +46,9 @@ jobs:
         uses: microsoft/setup-msbuild@v3
 
       - name: Checkout Repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: encrypted-secrets-zip
 
@@ -56,7 +60,7 @@ jobs:
       - name: Finalize and Cleanup zip/json
         if: always() # Run even if previous steps fail
         continue-on-error: true
-        uses: fjogeleit/http-request-action@v1
+        uses: fjogeleit/http-request-action@v2
         with:
           url: "${{ secrets.GENURL }}/cleanzip?sharecode=4X3IIAEKTV"
           method: 'POST'
@@ -69,7 +73,7 @@ jobs:
 
         # Build. Upstream (1.5.0) pins the privacy-DLL source to ecd8d6a… for all versions.
       - name: Build the project
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         with:
           timeout_minutes: 5
           max_attempts: 3
@@ -87,7 +91,7 @@ jobs:
             msbuild ${{ env.project_path }} -p:Configuration=${{ inputs.configuration }} -p:Platform=${{ inputs.platform }} /p:TargetVersion=${{ inputs.target_version }}
 
       - name: Archive build artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         if: ${{ inputs.upload-artifact }}
         with:
             name: topmostwindow-artifacts

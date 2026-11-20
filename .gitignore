@@ -10,6 +10,8 @@ secrets.local.sh
 
 # Runtime artifacts - uploaded icons/logos and generated secrets zips / clients.
 # These hold user data and (for temp_zips) the encrypted build config.
+# (Directory-level ignores supersede upstream's global *.zip/*.png, which would
+#  also ignore committed icon source assets.)
 png/
 temp_zips/
 exe/
